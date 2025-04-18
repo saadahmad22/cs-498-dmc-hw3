@@ -25,7 +25,7 @@ def load_data(csv_path):
         bt_row.set_cell(COLUMN_FAMILY_ID, 'make', row['Make'].strip().upper())
         bt_row.set_cell(COLUMN_FAMILY_ID, 'model', row['Model'])
         bt_row.set_cell(COLUMN_FAMILY_ID, 'model year', row['Model Year'])
-        bt_row.set_cell(COLUMN_FAMILY_ID, 'electric range', row['Electric Range'].strip() or "0")
+        bt_row.set_cell(COLUMN_FAMILY_ID, 'electric range', str(int(row['Electric Range'].strip())) if row['Electric Range'].strip().isdigit() else "0")
         bt_row.set_cell(COLUMN_FAMILY_ID, 'city', row['City'].strip().upper())
         bt_row.set_cell(COLUMN_FAMILY_ID, 'county', row['County'])
         rows.append(bt_row)
