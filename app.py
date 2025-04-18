@@ -15,43 +15,34 @@ app = Flask(__name__)
 
 @app.route('/rows')
 def total_rows():
-    return str(sum(1 for _ in table.read_rows()))
+    return table.read_row(b"total_rows").cells[COLUMN_FAMILY_ID][b'count'][0].value.decode()
 
 @app.route('/Best-BMW')
 def best_bmw():
-    count = 0
-    rows = table.read_rows()
-    for row in rows:
-        cells = row.cells[COLUMN_FAMILY_ID]
-        make = cells.get(b'make', [None])[0]
-        erange = cells.get(b'electric range', [None])[0]
-        if make and make.value.decode().strip().upper() == 'BMW':
-            try:
-                if erange and int(erange.value) > 100:
-                    count += 1
-            except ValueError:
-                # ignore errorss
-                continue
-    return str(count)
+    filter_chain = row_filters.RowFilterChain([
+        row_filters.ColumnQualifierRegexFilter(b'make'),
+        row_filters.ValueRegexFilter(b'BMW'),
+        row_filters.ColumnQualifierRegexFilter(b'electric_range'),
+        row_filters.ValueRangeFilter(start_value=b'101', end_value=b'9999')
+    ])
+    
+    return str(sum(1 for _ in table.read_rows(filter_=filter_chain)))
 
 @app.route('/tesla-owners')
 def tesla_owners():
-    count = 0
-    rows = table.read_rows()
-    for row in rows:
-        cells = row.cells[COLUMN_FAMILY_ID]
-        make = cells.get(b'make', [None])[0]
-        city = cells.get(b'city', [None])[0]
-        if make and city:
-            if make.value.decode().strip().upper() == 'TESLA' and city.value.decode().strip().upper() == 'SEATTLE':
-                count += 1
-    return str(count)
+    filter_chain = row_filters.RowFilterChain([
+        row_filters.ColumnQualifierRegexFilter(b'make'),
+        row_filters.ValueRegexFilter(b'TESLA'),
+        row_filters.ColumnQualifierRegexFilter(b'city'),
+        row_filters.ValueRegexFilter(b'SEATTLE')
+    ])
+    return str(sum(1 for _ in table.read_rows(filter_=filter_chain)))
 
 @app.route('/update')
 def update_electric_range():
     row_key = b'257246118'
     row = table.direct_row(row_key)
-    row.set_cell(COLUMN_FAMILY_ID, 'electric range', '200')
+    row.set_cell(COLUMN_FAMILY_ID, b'electric range', '200')
     row.commit()
     return "Success"
 
@@ -63,20 +54,23 @@ def delete_old():
     for row in rows:
         cells = row.cells[COLUMN_FAMILY_ID]
         model_year = cells.get(b'model year', [None])[0]
-        if model_year:
-            try:
-                if int(model_year.value) < 2014:
-                    to_delete.append(row.row_key)
-            except ValueError:
-                continue
+        if model_year and int(model_year.value) < 2014:
+            to_delete.append(row.row_key)
     # delete rows
-    for row_key in to_delete:
-        row = table.direct_row(row_key)
-        row.delete()
-        row.commit()
-    return str(sum(1 for _ in table.read_rows()))
+    for i in range(0, len(to_delete), 500):
+        batch = table.mutate_rows()
+        for key in to_delete[i:i+500]:
+            row = table.direct_row(key)
+            row.delete()
+            batch.add(row)
+        batch.commit()
+
+    counter_row = table.direct_row(b"total_rows")
+    counter_row.increment_cell_value(COLUMN_FAMILY_ID, b"count", -len(to_delete))
+    counter_row.commit()
+    return str(int(total_rows()) - len(to_delete))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=80)
 
 
