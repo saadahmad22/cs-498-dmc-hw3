@@ -12,7 +12,12 @@ def load_data(csv_path):
     instance = client.instance(INSTANCE_ID)
     table = instance.table(TABLE_ID)
 
+    counter_row = table.direct_row(b"total_rows")
+    counter_row.set_cell("ev_info", b"count", str(0).encode())
+    counter_row.commit()
+
     df = pd.read_csv(csv_path, dtype=str, na_filter=False)
+    total_rows = 0
     rows = []
     for _, row in df.iterrows():
         row_key = row['DOL Vehicle ID'].encode()
@@ -24,14 +29,19 @@ def load_data(csv_path):
         bt_row.set_cell(COLUMN_FAMILY_ID, 'city', row['City'])
         bt_row.set_cell(COLUMN_FAMILY_ID, 'county', row['County'])
         rows.append(bt_row)
+        total_rows += 1
         
         # batch write, then write rest
         if len(rows) == 500:
             table.mutate_rows(rows)
+            counter_row.increment_cell_value("ev_info", b"count", 500)
+            counter_row.commit()
             rows = []
     if rows:
         table.mutate_rows(rows)
-    print("Data load complete.")
+        counter_row.increment_cell_value("ev_info", b"count", len(rows))
+        counter_row.commit()
+    print(f"Loaded {total_rows} rows.")
 
 if __name__ == "__main__":
     load_data('Electric_Vehicle_Population_Data.csv')
