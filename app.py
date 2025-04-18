@@ -15,14 +15,19 @@ app = Flask(__name__)
 
 @app.route('/rows')
 def total_rows():
-    return table.read_row(b"total_rows").cells[COLUMN_FAMILY_ID][b'count'][0].value.decode()
+    row = table.read_row(b"total_rows")
+    if not row:
+        return "0"
+    cells = row.cells.get(COLUMN_FAMILY_ID, {})
+    count_cell = cells.get(b'count', [None])[0]
+    return count_cell.value.decode() if count_cell else "0"
 
 @app.route('/Best-BMW')
 def best_bmw():
     filter_chain = row_filters.RowFilterChain([
         row_filters.ColumnQualifierRegexFilter(b'make'),
         row_filters.ValueRegexFilter(b'BMW'),
-        row_filters.ColumnQualifierRegexFilter(b'electric_range'),
+        row_filters.ColumnQualifierRegexFilter(b'electric range'),
         row_filters.ValueRangeFilter(start_value=b'101', end_value=b'9999')
     ])
     
